@@ -41,6 +41,13 @@
 <div class="card">
   <h2>bootstrap</h2>
   <div id="boot" class="dim">…loading sqlite-wasm from cdnjs…</div>
+  <div id="vrm_boot" class="dim">…loading three-vrm…</div>
+</div>
+
+<div class="card">
+  <h2>avatar · SK_VRM1_Constraint_Twist_Sample (V-Sekai-fire)</h2>
+  <canvas id="stage" width="640" height="360" style="width:100%;max-width:640px;background:#0a0c0f;border-radius:6px"></canvas>
+  <p class="dim">Loaded via three-vrm from V-Sekai-fire/SK_VRM1_Constraint_Twist_Sample (raw.githubusercontent). Same VRM the sqlar-cas testdata explodes into a USDA stage tree. Each reflex action nudges the avatar so a stimulus's effect is visible.</p>
 </div>
 
 <div class="card">
@@ -76,6 +83,16 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.4.0/lib/three-vrm.module.min.js"
+  }
+}
+</script>
 <script src="app.js"></script>
+<script type="module" src="vrm.js"></script>
 </body>
 </html>

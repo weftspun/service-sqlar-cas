@@ -125,10 +125,13 @@ document.addEventListener("click", (e) => {
   const lines = [];
   for (const p of ["traveler", "guide"]) {
     const r = reflex(p, stim);
-    if (r) lines.push(
-      `<span class="${p}">${p}</span> ← <span class="dim">${stim}</span> → ` +
-      `<span class="action">${r.action}</span> ` +
-      `<span class="dim">${JSON.stringify(r.effect)}</span>`);
+    if (r) {
+      lines.push(
+        `<span class="${p}">${p}</span> ← <span class="dim">${stim}</span> → ` +
+        `<span class="action">${r.action}</span> ` +
+        `<span class="dim">${JSON.stringify(r.effect)}</span>`);
+      if (window.__vrm_reflex_cue) window.__vrm_reflex_cue(p, r.action);
+    }
   }
   log(`<div>${lines.join("<br>") || `<span class="dim">(no match: ${stim})</span>`}</div>`);
   render();
