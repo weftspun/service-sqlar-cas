@@ -59,7 +59,45 @@ The controls exist because a check that only ever sees the true input has never 
 
 ## Deploy shape (future)
 
-Not deployed yet. Target shape: `fly deploy` on fly.io region `sjc`, one machine, mTLS listener at `[::]:8200`, sidecar Tailscale for operator peers. Config lives in a `config-fabric.exs` (Elixir) that mirrors what `service-openbao/config-fdb.hcl` does today. The switch is at the transport layer: peers change their `BAO_ADDR` env from `weftspun-bao.internal:8200` to `weftspun-sqlar-cas.internal:8200`.
+Not deployed yet. Target shape: `fly deploy` on fly.io region `sjc`, one machine, mTLS listener at `[::]:8200`, sidecar Tailscale for operator peers. Config lives in a `config-runtime.exs` (Elixir). Peers wire to `weftspun-sqlar-cas.internal:8200` — separate hostname from `weftspun-bao.internal:8200`; nothing pretends to be Bao.
+
+## Storage (future): Tigris S3 in zero-trust mode
+
+Chunks live in a private Tigris bucket on fly.io (`fly storage create` on this app). The bucket is **zero-trust**: no public read, no public list, no unauthenticated GET.
+
+Access flow:
+
+```
+peer  --mTLS-->  service-sqlar-cas  --ReBAC-check (Bao)-->  authorize?
+                        |                                       |
+                        v                                       v
+              Tigris S3 (private)  <--S3 creds (service only)---+
+                        |
+                        v
+                  presign URL or stream bytes back to peer
+```
+
+Two access strategies, matched to the peer's shape:
+
+1. **Byte-stream through the service** — peer hits `GET /v1/sqlar-cas/chunk/:hash_hex`; service checks ReBAC, streams the S3 body back through its own HTTP response. Simple, no S3 exposure at all, but every byte goes through the service (Bandit is fast enough for chunk-sized bodies).
+2. **Presigned URL** — peer hits `GET /v1/sqlar-cas/chunk/:hash_hex?presign=1`; service checks ReBAC, presigns a short-lived (~60s) S3 GET URL, returns it. Peer then fetches direct from Tigris. Better for large-avatar / world payloads; no service in the byte path.
+
+Either way, only the service holds the S3 credentials — peers never see them. Peer authorization is always ReBAC-gated at the service.
+
+Credential provenance for the S3 side:
+
+- **Preferred**: Bao's AWS secrets engine issues short-lived S3 creds to the service. Rotate on TTL (~1h). Service holds a Bao cert, calls `bao read tigris/creds/service-sqlar-cas` at startup + on TTL rollover.
+- **Fallback**: static credentials in fly secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3=https://fly.storage.tigris.dev`). Simpler; no rotation. Acceptable for the pre-Bao-integration phase.
+
+## ReBAC lookups (future)
+
+The service does not own identity or relationships. It reads ReBAC state from Bao at authorization time, sharing credentials with the rest of the fleet:
+
+- Service has its own mTLS cert issued by the same CA as every peer.
+- On each read that needs authorization, calls Bao's identity + relationships API (or a local cache with a short TTL) to resolve `enumerate_readers(object)`.
+- Cache TTL is short (~5s) so revocations propagate fast; the readers set is tiny (a userset expansion), so cache misses are cheap.
+
+The `SqlarCas.ReBAC` module currently reads a local `relationships` table for dev/test. In prod it swaps to `SqlarCas.ReBAC.Bao` — same interface, Bao as the source of truth.
 
 ## What this service DOES NOT do
 
