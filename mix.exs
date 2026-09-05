@@ -23,7 +23,9 @@ defmodule SqlarCas.MixProject do
       {:bandit, "~> 1.6"},
       {:plug, "~> 1.16"},
       {:jason, "~> 1.4"},
-      {:exqlite, "~> 0.30"}
+      {:exqlite, "~> 0.30"},
+      {:req, "~> 0.5"},
+      {:req_s3, "~> 0.2"}
       # zstd: use OTP's built-in :zstd (Erlang/OTP 27+) — no dep needed.
     ]
   end

@@ -61,43 +61,60 @@ The controls exist because a check that only ever sees the true input has never 
 
 Not deployed yet. Target shape: `fly deploy` on fly.io region `sjc`, one machine, mTLS listener at `[::]:8200`, sidecar Tailscale for operator peers. Config lives in a `config-runtime.exs` (Elixir). Peers wire to `weftspun-sqlar-cas.internal:8200` — separate hostname from `weftspun-bao.internal:8200`; nothing pretends to be Bao.
 
-## Storage (future): Tigris S3 in zero-trust mode
+## Storage: Tigris S3, zero-trust offline
 
-Chunks live in a private Tigris bucket on fly.io (`fly storage create` on this app). The bucket is **zero-trust**: no public read, no public list, no unauthenticated GET.
+Chunks live in a Tigris bucket on fly.io. **The zero-trust property is enforced by the wire crypto, not by an online gate** — reads and writes work correctly even when both this service AND OpenBao are offline.
 
-Access flow:
+### Where the guarantee lives
+
+| layer | who enforces | offline behavior |
+|---|---|---|
+| Confidentiality (chunk bytes) | AEAD envelope + X25519 wraps | Cached wraps + cached file_keys keep decrypting |
+| Integrity (chunk bytes) | SHA-512/256(ct) content addressing + Poly1305 tag | Tampered bytes hash to a different key + fail AEAD tag |
+| Read authorization (who holds a wrap) | X25519 wrap → recipient private key | Wraps travel with the .sqlite / this service's DB; private keys stay in each peer's keystore |
+| Write integrity (bogus writes) | Chunk key = SHA-512/256(ct) | Garbage writes land at their own garbage hash; can't overwrite a legit chunk |
+| Write ReBAC (new readers) | Bao ReBAC decision at wrap insertion | REQUIRES Bao online — this is the one operation that cannot be done offline |
+
+### Access flow
 
 ```
-peer  --mTLS-->  service-sqlar-cas  --ReBAC-check (Bao)-->  authorize?
-                        |                                       |
-                        v                                       v
-              Tigris S3 (private)  <--S3 creds (service only)---+
-                        |
-                        v
-                  presign URL or stream bytes back to peer
+peer  --S3 creds (cached)-->  Tigris S3 (private)   ← reads + writes, no service in the byte path
+                                     ^
+                                     |
+peer  --mTLS-->  service-sqlar-cas   |   ← wrap insertion + ReBAC lookups (Bao-mediated when up)
+                        ^            |
+                        |            |
+                        +---Bao--(ReBAC decision at wrap-write time only)
 ```
 
-Two access strategies, matched to the peer's shape:
+Peers hold Tigris S3 credentials locally (issued by Bao's AWS secrets engine when online; cached for the outage window). They fetch and PUT chunks directly against Tigris. The service is out of the byte path entirely.
 
-1. **Byte-stream through the service** — peer hits `GET /v1/sqlar-cas/chunk/:hash_hex`; service checks ReBAC, streams the S3 body back through its own HTTP response. Simple, no S3 exposure at all, but every byte goes through the service (Bandit is fast enough for chunk-sized bodies).
-2. **Presigned URL** — peer hits `GET /v1/sqlar-cas/chunk/:hash_hex?presign=1`; service checks ReBAC, presigns a short-lived (~60s) S3 GET URL, returns it. Peer then fetches direct from Tigris. Better for large-avatar / world payloads; no service in the byte path.
+**Why permissive S3 is safe here**: chunks are AEAD-encrypted with a file_key that only wrap-holders can unwrap. A peer without a wrap can DOWNLOAD any chunk from S3 and learn nothing (opaque ct). A peer without the file_key can UPLOAD any bytes to S3 and just land at a hash nobody's caibx references (wasted space, no security impact). The bucket does not need per-request ReBAC gating for confidentiality to hold — the crypto handles that.
 
-Either way, only the service holds the S3 credentials — peers never see them. Peer authorization is always ReBAC-gated at the service.
+**What the bucket policy DOES need**: mTLS cert as a `weftspun-fleet` peer (basic fleet-membership auth), plus per-peer rate limits to bound waste-space DoS. That's it — no fine-grained ReBAC tuples at the S3 layer.
 
-Credential provenance for the S3 side:
+### What the service is actually for
 
-- **Preferred**: Bao's AWS secrets engine issues short-lived S3 creds to the service. Rotate on TTL (~1h). Service holds a Bao cert, calls `bao read tigris/creds/service-sqlar-cas` at startup + on TTL rollover.
-- **Fallback**: static credentials in fly secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3=https://fly.storage.tigris.dev`). Simpler; no rotation. Acceptable for the pre-Bao-integration phase.
+- **Wrap issuance**: `POST /v1/sqlar-cas/wraps` — insert a new wrap row for a recipient. Requires Bao ReBAC check (writer authorized to add this reader). Only online operation.
+- **Wrap enumeration**: `GET /v1/sqlar-cas/readers/:object` — expand a userset. Cached locally; Bao consulted on cache miss / TTL expiry.
+- **Chunk-hash presign** (optional): `POST /v1/sqlar-cas/chunk/presign` — service signs an S3 URL for a peer that doesn't hold S3 creds. Rare; most peers hold their own creds.
+- **Diagnostic reads**: `GET /v1/sqlar-cas/sqlar/:name` — sqlar row metadata; reads a wrap manifest.
 
-## ReBAC lookups (future)
+### Credential provenance
 
-The service does not own identity or relationships. It reads ReBAC state from Bao at authorization time, sharing credentials with the rest of the fleet:
+- **Preferred**: Bao's AWS secrets engine issues short-lived S3 creds (~1h) to each peer directly. Peer holds cert → gets creds → uses them for the TTL window. Rotates before expiry.
+- **Fallback for the pre-Bao-integration phase**: static `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_ENDPOINT_URL_S3=https://fly.storage.tigris.dev` in each peer's fly secrets.
 
-- Service has its own mTLS cert issued by the same CA as every peer.
-- On each read that needs authorization, calls Bao's identity + relationships API (or a local cache with a short TTL) to resolve `enumerate_readers(object)`.
-- Cache TTL is short (~5s) so revocations propagate fast; the readers set is tiny (a userset expansion), so cache misses are cheap.
+## ReBAC lookups
 
-The `SqlarCas.ReBAC` module currently reads a local `relationships` table for dev/test. In prod it swaps to `SqlarCas.ReBAC.Bao` — same interface, Bao as the source of truth.
+The service does not own identity. It reads ReBAC state from Bao at wrap-write time, sharing credentials with the rest of the fleet:
+
+- Service has its own mTLS cert issued by the same fleet CA as every peer.
+- On wrap-write (a peer-initiated `POST /v1/sqlar-cas/wraps`), calls Bao's identity + relationships API to check `writer(current_peer, object)`, then inserts the wrap row.
+- On enumerate (rare — most reads don't need this since crypto is the read gate), same call.
+- A local cache with a short TTL (~5s) keeps expand hot-paths cheap without stale-permission risk.
+
+`SqlarCas.ReBAC` currently reads a local `relationships` table for dev/test. In prod it swaps to `SqlarCas.ReBAC.Bao` — same interface, Bao as the source of truth.
 
 ## What this service DOES NOT do
 
