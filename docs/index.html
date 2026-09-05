@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sqlar-cas · persona reflex demo</title>
+<style>
+  :root {
+    --bg: #0f1216; --ink: #e6e6e8; --dim: #8a8f98;
+    --hot: #ffb000; --cool: #00c8b3; --mag: #ff5aa2;
+    --panel: #191c22; --edge: #262a33; --font: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  html, body { background: var(--bg); color: var(--ink); font-family: var(--font); margin: 0; }
+  body { padding: 2rem; max-width: 900px; margin: 0 auto; line-height: 1.55; }
+  h1 { font-weight: 500; letter-spacing: -0.02em; }
+  .lede { color: var(--dim); font-size: 0.95rem; }
+  .card { background: var(--panel); border: 1px solid var(--edge); border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0; }
+  .card h2 { margin-top: 0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); }
+  button { background: var(--panel); color: var(--ink); border: 1px solid var(--edge); border-radius: 6px; padding: 0.35rem 0.75rem; font: inherit; cursor: pointer; margin: 0.25rem 0.35rem 0.25rem 0; }
+  button:hover { border-color: var(--hot); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  pre { overflow-x: auto; background: #0a0c0f; padding: 0.75rem; border-radius: 6px; font-size: 0.85rem; }
+  .traveler { color: var(--cool); }
+  .guide { color: var(--mag); }
+  .action { color: var(--hot); font-weight: bold; }
+  .dim { color: var(--dim); }
+  .log { max-height: 320px; overflow-y: auto; font-size: 0.85rem; }
+  .row { display: flex; gap: 0.5rem; align-items: center; margin: 0.25rem 0; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 1rem; font-size: 0.85rem; }
+  .kv .k { color: var(--dim); }
+  a { color: var(--cool); }
+</style>
+</head>
+<body>
+
+<h1>sqlar-cas · persona reflex demo</h1>
+<p class="lede">
+  WASM SQLite loads <code>fixtures/persona.sqlite</code> over HTTP range requests and runs the reflex-executor queries client-side. No round-trip to a server for gameplay — the wire hosts the data, the browser walks it. Same shape sqlar-cas uses for its static-hosting path.
+</p>
+
+<div class="card">
+  <h2>bootstrap</h2>
+  <div id="boot" class="dim">…loading sqlite-wasm from cdnjs…</div>
+</div>
+
+<div class="card">
+  <h2>scene · isekai crossroads</h2>
+  <div>
+    <button data-stim="arrive">arrive</button>
+    <button data-stim="traveler_arrived">traveler_arrived</button>
+    <button data-stim="guide_present">guide_present</button>
+    <button data-stim="asked">asked</button>
+    <button data-stim="wait">wait</button>
+    <button data-stim="depart">depart</button>
+    <button data-stim="__night">→ night</button>
+    <button data-stim="__reset">reset</button>
+  </div>
+  <div id="log" class="log"></div>
+</div>
+
+<div class="card">
+  <h2>state</h2>
+  <div class="row"><span class="traveler">traveler</span><div id="s_traveler" class="kv"></div></div>
+  <div class="row"><span class="guide">guide</span><div id="s_guide" class="kv"></div></div>
+</div>
+
+<div class="card">
+  <h2>ReBAC · <code>world#reader</code> expanded</h2>
+  <div id="readers" class="dim">…</div>
+  <p class="dim">Recursive userset expansion (Zanzibar shape): <code>world#reader → friends#member → alice/bob/charlie</code>.</p>
+</div>
+
+<div class="card">
+  <h2>range fetch stats</h2>
+  <div id="range" class="kv dim"><span class="k">bytes fetched</span><span id="bytes_fetched">0</span><span class="k">requests</span><span id="req_count">0</span></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
