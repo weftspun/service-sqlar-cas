@@ -8,16 +8,13 @@ const $ = (id) => document.getElementById(id);
 const log = (html) => { const l = $("log"); l.innerHTML = html + l.innerHTML; };
 
 async function rangeFetch(url) {
-  // Full-file fetch with a Range header. sql.js can't page-fault on its
-  // own; we grab the whole (small) DB in one range GET. For a large DB,
-  // swap to sqlite-wasm's OPFS/HttpVfs which pages on demand.
-  const size = await fetch(url, { method: "HEAD" })
-    .then(r => Number(r.headers.get("content-length")));
+  // sql.js can't page-fault on its own; grab the whole (small) DB in
+  // one Range GET. Server advertises Accept-Ranges: bytes so this IS
+  // a range request (bytes=0-), just for the whole file. For a large
+  // DB, swap to sqlite-wasm's OPFS/HttpVfs which pages on demand.
+  const resp = await fetch(url, { headers: { Range: "bytes=0-" } });
   reqCount++; $("req_count").textContent = reqCount;
-
-  const chunk = await fetch(url, { headers: { Range: `bytes=0-${size - 1}` } });
-  reqCount++; $("req_count").textContent = reqCount;
-  const buf = await chunk.arrayBuffer();
+  const buf = await resp.arrayBuffer();
   bytesFetched += buf.byteLength; $("bytes_fetched").textContent = bytesFetched;
   return new Uint8Array(buf);
 }
