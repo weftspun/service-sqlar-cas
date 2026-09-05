@@ -2,18 +2,28 @@ defmodule SqlarCas.ReBAC do
   @moduledoc """
   Zanzibar-style ReBAC over the `relationships` table.
 
-  Tuple: `(object, relation, userset)`; userset is a plain subject or
-  `object#relation` (a computed userset). `expand/2` resolves recursively
-  with a cycle guard. Bao's write path is the only inserter — the engine
-  READS via this module.
+  A tuple is `(object, relation, userset, caveat?)`. Userset is a
+  plain subject or `object#relation` (a computed userset). Caveat
+  is a JSON conditional predicate evaluated at check time
+  (see `SqlarCas.Caveat`); TTL is one caveat kind among an
+  extensible set. Unconditional tuples carry a NULL caveat.
+
+  `expand/2` resolves recursively with a cycle guard and filters
+  out tuples whose caveat is unsatisfied for the current context.
   """
 
-  alias SqlarCas.Store
+  alias SqlarCas.{Store, Caveat}
 
-  def grant(object, relation, userset) do
+  @doc """
+  Grant a tuple, optionally with a caveat.
+
+    grant("world", "reader", "alice")
+    grant("world", "reader", "alice", Caveat.expires_at(1_800_000_000))
+  """
+  def grant(object, relation, userset, caveat \\ nil) do
     Store.execute!(
-      "INSERT OR IGNORE INTO relationships(object, relation, userset) VALUES (?,?,?)",
-      [object, relation, userset]
+      "INSERT OR REPLACE INTO relationships(object, relation, userset, caveat) VALUES (?,?,?,?)",
+      [object, relation, userset, Caveat.encode(caveat)]
     )
   end
 
@@ -24,9 +34,32 @@ defmodule SqlarCas.ReBAC do
     )
   end
 
-  def expand(object, relation), do: expand(object, relation, MapSet.new())
+  @doc """
+  Delete every tuple whose caveat is unsatisfied at `now`. Idempotent.
+  Used for background GC — the check-time evaluation in `expand`
+  already excludes them from grants, this just reclaims rows.
+  """
+  def gc_unsatisfied(now \\ System.system_time(:second)) do
+    ctx = %{now: now}
 
-  defp expand(object, relation, seen) do
+    rows =
+      Store.query!(
+        "SELECT object, relation, userset, caveat FROM relationships WHERE caveat IS NOT NULL"
+      )
+
+    for [obj, rel, us, cav_json] <- rows,
+        not Caveat.satisfied?(Caveat.decode(cav_json), ctx) do
+      Store.execute!(
+        "DELETE FROM relationships WHERE object=? AND relation=? AND userset=?",
+        [obj, rel, us]
+      )
+    end
+  end
+
+  def expand(object, relation),
+    do: expand(object, relation, MapSet.new(), %{now: System.system_time(:second)})
+
+  defp expand(object, relation, seen, ctx) do
     key = {object, relation}
 
     if MapSet.member?(seen, key) do
@@ -35,16 +68,20 @@ defmodule SqlarCas.ReBAC do
       seen = MapSet.put(seen, key)
 
       Store.query!(
-        "SELECT userset FROM relationships WHERE object=? AND relation=?",
+        "SELECT userset, caveat FROM relationships WHERE object=? AND relation=?",
         [object, relation]
       )
-      |> Enum.reduce(MapSet.new(), fn [userset], acc ->
-        case String.split(userset, "#", parts: 2) do
-          [sub_obj, sub_rel] ->
-            MapSet.union(acc, expand(sub_obj, sub_rel, seen))
+      |> Enum.reduce(MapSet.new(), fn [userset, cav_json], acc ->
+        if Caveat.satisfied?(Caveat.decode(cav_json), ctx) do
+          case String.split(userset, "#", parts: 2) do
+            [sub_obj, sub_rel] ->
+              MapSet.union(acc, expand(sub_obj, sub_rel, seen, ctx))
 
-          [_subject] ->
-            MapSet.put(acc, userset)
+            [_subject] ->
+              MapSet.put(acc, userset)
+          end
+        else
+          acc
         end
       end)
     end

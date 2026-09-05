@@ -18,6 +18,7 @@ defmodule SqlarCas.Store do
   CREATE TABLE IF NOT EXISTS sqlar_chunks(hash BLOB PRIMARY KEY, ct BLOB);
   CREATE TABLE IF NOT EXISTS relationships(
     object TEXT, relation TEXT, userset TEXT,
+    caveat TEXT,  -- JSON conditional predicate, NULL = unconditional
     PRIMARY KEY(object, relation, userset));
   """
 
