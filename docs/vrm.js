@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import * as MotionBricks from './motion_bricks.js';
 
 const VRM_URL =
   'https://raw.githubusercontent.com/V-Sekai-fire/SK_VRM1_Constraint_Twist_Sample/main/' +
@@ -113,6 +114,7 @@ function frame() {
     vrm.scene.position.copy(avatar.pos);
     vrm.scene.rotation.y = avatar.yaw + poke;
     poke *= 0.9;
+    MotionBricks.update(performance.now() / 1000);
     vrm.update(dt);
   }
 

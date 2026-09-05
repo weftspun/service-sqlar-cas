@@ -164,7 +164,7 @@ function say(stim) {
     speechSynthesis.cancel();
     speechSynthesis.speak(new SpeechSynthesisUtterance(line));
   }
-  if (window.__vrm_reflex_cue) window.__vrm_reflex_cue("guide", r?.action ?? "speak");
+  if (window.__vrm_reflex_cue) window.__vrm_reflex_cue("guide", r?.action ?? "speak", r?.effect);
   render();
 }
 
@@ -189,7 +189,7 @@ document.addEventListener("click", (e) => {
         `<span class="${p}">${p}</span> ← <span class="dim">${stim}</span> → ` +
         `<span class="action">${r.action}</span> ` +
         `<span class="dim">${JSON.stringify(r.effect)}</span>`);
-      if (window.__vrm_reflex_cue) window.__vrm_reflex_cue(p, r.action);
+      if (window.__vrm_reflex_cue) window.__vrm_reflex_cue(p, r.action, r.effect);
     }
   }
   log(`<div>${lines.join("<br>") || `<span class="dim">(no match: ${stim})</span>`}</div>`);
