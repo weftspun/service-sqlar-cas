@@ -30,6 +30,7 @@ async function boot() {
   $("boot").innerHTML = `<span style="color:#00c8b3">ready.</span> WASM SQLite loaded ${bytes.length.toLocaleString()} B fixture over ${reqCount} range GET(s).`;
   render();
   renderReaders();
+  renderVnGroups();
 }
 
 function reflex(persona, stimulus) {
@@ -110,6 +111,46 @@ function reset() {
   log(`<div class="dim">— reset —</div>`);
   render();
 }
+
+const VN_GROUPS = [
+  { name: "talk",    cmds: [
+    { stim: "hello", sub: "greet",   line: "Hello." },
+    { stim: "bye",   sub: "farewell", line: "Farewell." },
+  ]},
+  { name: "ask",     cmds: [
+    { stim: "where", sub: "road",  line: "Where does this road lead?" },
+    { stim: "who",   sub: "guide", line: "Who are you?" },
+    { stim: "help",  sub: "aid",   line: "Can you help me?" },
+  ]},
+  { name: "observe", cmds: [
+    { stim: "night", sub: "hour",  line: "The hour is getting late." },
+  ]},
+];
+
+function renderVnGroups() {
+  const root = document.getElementById("vn_groups");
+  if (!root) return;
+  let n = 0, html = "";
+  for (const grp of VN_GROUPS) {
+    html += `<div class="grp"><h3>/${grp.name}</h3>`;
+    for (const cmd of grp.cmds) {
+      n += 1;
+      html += `<button class="cmd" data-say="${cmd.stim}" data-num="${n}">` +
+              `<span class="num">${n}</span>` +
+              `<span class="slash">/${grp.name} ${cmd.sub}</span> ` +
+              `<span class="lit">「${cmd.line}」</span></button> `;
+    }
+    html += `</div>`;
+  }
+  root.innerHTML = html;
+}
+
+document.addEventListener("keydown", (e) => {
+  if (!/^[1-9]$/.test(e.key)) return;
+  if (e.target && ["INPUT","TEXTAREA"].includes(e.target.tagName)) return;
+  const btn = document.querySelector(`button[data-num="${e.key}"]`);
+  if (btn) { btn.click(); e.preventDefault(); }
+});
 
 function say(stim) {
   if (!db) return;

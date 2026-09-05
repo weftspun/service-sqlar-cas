@@ -29,6 +29,12 @@
   .kv { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 1rem; font-size: 0.85rem; }
   .kv .k { color: var(--dim); }
   a { color: var(--cool); }
+  .grp { margin-bottom: 0.35rem; }
+  .grp h3 { font-size: 0.7rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; margin: 0.5rem 0 0.25rem; }
+  .cmd { font-family: var(--font); }
+  .num { display: inline-block; min-width: 1.5em; padding: 0 0.3em; margin-right: 0.4em; background: var(--edge); border-radius: 3px; color: var(--hot); font-weight: bold; }
+  .slash { color: var(--dim); }
+  .lit { color: var(--ink); font-style: italic; }
 </style>
 </head>
 <body>
@@ -51,15 +57,8 @@
 </div>
 
 <div class="card">
-  <h2>you say · visual novel prompts</h2>
-  <div id="vn_prompts">
-    <button data-say="hello">「Hello.」</button>
-    <button data-say="where">「Where does this road lead?」</button>
-    <button data-say="who">「Who are you?」</button>
-    <button data-say="help">「Can you help me?」</button>
-    <button data-say="night">「The hour is getting late.」</button>
-    <button data-say="bye">「Farewell.」</button>
-  </div>
+  <h2>commands · discord-style · press 1–9</h2>
+  <div id="vn_groups"></div>
   <div id="vn_line" class="log dim" style="margin-top:0.75rem;font-style:italic;min-height:2em"></div>
   <div class="row">
     <label style="font-size:0.85rem;color:var(--dim)">
