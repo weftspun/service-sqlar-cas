@@ -20,6 +20,15 @@ defmodule SqlarCas.Store do
     object TEXT, relation TEXT, userset TEXT,
     caveat TEXT,  -- JSON conditional predicate, NULL = unconditional
     PRIMARY KEY(object, relation, userset));
+  CREATE TABLE IF NOT EXISTS persona_actions(
+    persona_id TEXT, action_name TEXT,
+    precondition_json TEXT,  -- {"pointer": "eq", ...} tests against state
+    effect_json TEXT,        -- {"pointer": new_value, ...} bindings to apply
+    priority INTEGER DEFAULT 0,
+    PRIMARY KEY(persona_id, action_name));
+  CREATE TABLE IF NOT EXISTS persona_state(
+    persona_id TEXT, pointer TEXT, value TEXT,
+    PRIMARY KEY(persona_id, pointer));
   """
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
