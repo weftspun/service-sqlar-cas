@@ -111,7 +111,25 @@ function reset() {
   render();
 }
 
+function say(stim) {
+  if (!db) return;
+  // Guide reflex first; fall back to _unmatched if no keyed match.
+  let r = reflex("guide", stim);
+  if (!r) r = reflex("guide", "_unmatched");
+  const line = r?.effect?.speech ?? "…";
+  const box = $("vn_line");
+  box.innerHTML = `<span class="guide">guide:</span> ${line}`;
+  if ($("tts_on")?.checked && window.speechSynthesis) {
+    speechSynthesis.cancel();
+    speechSynthesis.speak(new SpeechSynthesisUtterance(line));
+  }
+  if (window.__vrm_reflex_cue) window.__vrm_reflex_cue("guide", r?.action ?? "speak");
+  render();
+}
+
 document.addEventListener("click", (e) => {
+  const sayStim = e.target?.dataset?.say;
+  if (sayStim) { say(sayStim); return; }
   const stim = e.target?.dataset?.stim;
   if (!stim || !db) return;
   if (stim === "__night") {
